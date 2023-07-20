@@ -1,3 +1,4 @@
+import javax.crypto.Mac;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -6,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import javax.xml.bind.DatatypeConverter;
 
 public class EncrypterSample {
     private String algorithm = "AES/CBC/PKCS5Padding";
@@ -14,7 +16,7 @@ public class EncrypterSample {
     public static void main(String[] args) throws Exception {
         EncrypterSample encrypter = new EncrypterSample();
         String encrypted = encrypter.encrypt("{\"test\":\"hello\"}", false);
-        String decrypted = encrypter.decrypt(encrypted, false);
+        encrypter.decrypt(encrypted, false);
     }
 
     public String encrypt(String value, boolean serialize) throws Exception {
@@ -26,7 +28,7 @@ public class EncrypterSample {
 
         byte[] encryptedValue = cipher.doFinal(serialize ? serializeValue(value) : value.getBytes(StandardCharsets.UTF_8));
 
-        String json = buildJson(iv, encryptedValue);
+        String json = buildJson(iv, encryptedValue, hash(iv, encryptedValue));
         System.out.println("Encrypt Data Structure: " + json);
 
         String encrypted = encodeBase64(json.getBytes(StandardCharsets.UTF_8));
@@ -55,6 +57,20 @@ public class EncrypterSample {
         System.out.println("Decrypted: " + decrypted);
 
         return decrypted;
+    }
+
+    private String hash(byte[] iv, byte[] value) { 
+        try {
+            SecretKeySpec secretKey = new SecretKeySpec(key.getBytes(), "HmacSHA256");
+            Mac hasher = Mac.getInstance("HmacSHA256");
+            hasher.init(secretKey);
+
+            byte[] hash = hasher.doFinal((encodeBase64(iv) + encodeBase64(value)).getBytes());
+            
+            return DatatypeConverter.printHexBinary(hash).toLowerCase();
+        } catch (Exception e) {
+            throw new RuntimeException("Error", e);
+        }
     }
 
     private int getCipherIVLength() {
@@ -102,8 +118,8 @@ public class EncrypterSample {
         return json.substring(startIndex + 1 + key.length() + 3, endIndex);
     }
 
-    private String buildJson(byte[] iv, byte[] value) {
-        return String.format("{\"iv\":\"%s\",\"value\":\"%s\",\"mac\":\"\",\"tag\":\"\"}",
-                encodeBase64(iv), encodeBase64(value));
+    private String buildJson(byte[] iv, byte[] value, String mac) {
+        return String.format("{\"iv\":\"%s\",\"value\":\"%s\",\"mac\":\"%s\",\"tag\":\"\"}",
+                encodeBase64(iv), encodeBase64(value), mac);
     }
 }
